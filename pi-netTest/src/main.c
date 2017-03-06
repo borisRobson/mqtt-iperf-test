@@ -43,6 +43,9 @@ void startClient();
 int startTest = 0;
 int run = 1;
 
+#define FINISHED 0
+#define START 1
+
 void getLocalHost();
 
 #define DEBUG 1
@@ -108,7 +111,7 @@ void delivered(void *context, MQTTClient_deliveryToken dt)
     deliveredtoken = dt;
 }
 
-void MQTT_Publish(cJSON *output)
+void MQTT_Publish(cJSON *output, int topic)
 {
 	cJSON_AddItemToObject(output, "host", cJSON_CreateString(localhost));
 
@@ -121,7 +124,17 @@ void MQTT_Publish(cJSON *output)
 	pubmsg.payloadlen = strlen(msg);
 	pubmsg.qos = 1;
 	pubmsg.retained = 0;
-	MQTTClient_publishMessage(client, FinishedTopic, &pubmsg, &token);
+	
+	switch(topic)
+	{
+		case START:
+			MQTTClient_publishMessage(client, StreamTopic, &pubmsg, &token);
+			break;
+		case FINISHED:
+			MQTTClient_publishMessage(client, FinishedTopic, &pubmsg, &token);
+			break;		
+	}
+	
 
 	while(deliveredtoken != token){;}
 
@@ -246,6 +259,8 @@ int initIPERF(cJSON *config)
 
 	if(client_test == NULL)
 		return 0;
+		
+	MQTT_Publish(config, START);
 
 	return 1;
 }
@@ -309,7 +324,7 @@ int iperf_json_finish(struct iperf_test *test)
 {
 	cJSON* sum = cJSON_GetObjectItem(test->json_end, "sum_sent");
 
-	MQTT_Publish(sum);
+	MQTT_Publish(sum, FINISHED);
 
     if (test->title)
 	cJSON_AddStringToObject(test->json_top, "title", test->title);
@@ -335,13 +350,13 @@ int iperf_json_finish(struct iperf_test *test)
 int main(void) {
 	cJSON *config = readConfigFile();
 
+	getLocalHost();
+	
 	if(initMQTT(config) != MQTTCLIENT_SUCCESS)
 		raise(SIGINT);
 
 	if(initIPERF(config) == 0)
-		raise(SIGINT);
-
-	getLocalHost();
+		raise(SIGINT);	
 
 	client_data.test = client_test;
 
@@ -349,7 +364,7 @@ int main(void) {
 	{
 		if(startTest == 1)
 			startClient();
-		sleep((1/100));
+		sleep(1);
 	}
 
 	printf("client finished\n");

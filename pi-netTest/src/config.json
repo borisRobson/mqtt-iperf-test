@@ -12,7 +12,7 @@
 "targetHost":"10.10.40.136",
 "targetPort":"5201",
 "nstreams":"2",
-"bandwidth":"30",
+"bandwidth":"45",
 "duration":"5",
 "interval":"1"},
 "iperf-server":{"s-port":"5201"}}
