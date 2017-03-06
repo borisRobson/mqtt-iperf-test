@@ -323,7 +323,7 @@ void iperf_on_connect(struct iperf_test *test)
 int iperf_json_finish(struct iperf_test *test)
 {
 	cJSON* sum = cJSON_GetObjectItem(test->json_end, "sum_sent");
-
+	cJSON_AddItemToObject(sum, "clientID", cJSON_CreateString(clientID));
 	MQTT_Publish(sum, FINISHED);
 
     if (test->title)
