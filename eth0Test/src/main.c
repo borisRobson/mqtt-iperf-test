@@ -14,7 +14,6 @@
 #include "configparser.h"
 #include "initComponents.h"
 
-
 #define DEBUG 1
 
 void iperf_on_new_stream(struct iperf_stream *sp);
@@ -63,14 +62,14 @@ int msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *m
 
 	char* src = cJSON_GetObjectItem(json, "src")->valuestring;
 
-	if(strcmp(topicName, "/netTest/control") == 0)
+	if(strcmp(topicName, ControlTopic) == 0)
 	{
 		char* msg = cJSON_GetObjectItem(json, "msg")->valuestring;
 		printf("\t%s: %s\n", src, msg);
 		free(msg);
 		startTest = 1;
 	}
-	else if(strcmp(topicName, "/netTest/error") == 0)
+	else if(strcmp(topicName, ErrorTopic) == 0)
 	{
 		char *cause = cJSON_GetObjectItem(json, "cause")->valuestring;
 		printf("\tError from: %s\n\t cause: %s\n", src, cause);
@@ -193,6 +192,7 @@ int iperf_json_finish(struct iperf_test *test)
 	if(test->sender == 1)
 	{
 		cJSON* sum = cJSON_GetObjectItem(test->json_end, "sum_sent");
+		cJSON_AddItemToObject(sum, "clientID", cJSON_CreateString(clientID));
 		MQTT_Publish(sum, FINISHED);
 	}
 
@@ -222,8 +222,7 @@ void startClient()
 	pthread_attr_t attr;
 	int rc;
 	void *status;
-	//pthread_t client_thread;
-
+	
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
@@ -254,16 +253,17 @@ void startClient()
 int main()
 {
 	printf("%s\n", __FUNCTION__);
+	//assign callback for signal handler
 	signal(SIGINT, sigintHandler);
 
+	//parse config file to get cJSON object
 	cJSON* config = readConfigFile();
 
+	//assign localhost
 	char* host = getLocalHost();
 	localhost = host;
 
-	MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
-	int mqtt_rc;
-
+	//Parse MQTT section of config file	
 	cJSON *mqtt = cJSON_GetObjectItem(config, "mqtt");
 	char* broker = cJSON_GetObjectItem(mqtt, "broker")->valuestring;
 	clientID = cJSON_GetObjectItem(mqtt, "ClientID")->valuestring;
@@ -274,6 +274,9 @@ int main()
 	ErrorTopic = cJSON_GetObjectItem(mqtt, "ErrorTopic")->valuestring;
 	int QoS = atoi(cJSON_GetObjectItem(mqtt, "QoS")->valuestring);
 
+	//create MQTTClient, assign callbacks and subscriptions
+	MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
+	int mqtt_rc;
 	if(MQTTCLIENT_SUCCESS != MQTTClient_create(&client, broker, clientID, MQTTCLIENT_PERSISTENCE_NONE, NULL))
 	{
 		printf("Failed to create MQTT Client\n");
@@ -296,6 +299,8 @@ int main()
 	MQTTClient_subscribe(client, ControlTopic, QoS);
 	MQTTClient_subscribe(client, ErrorTopic, QoS);
 
+	//create client and server tests
+	//start server thread
 	client_test = iperf_new_test();
 	initIperfClient(config, client_test);
 
@@ -321,6 +326,7 @@ int main()
 	}
 	pthread_attr_destroy(&attr);
 
+	//check for start flag being set
 	while(run == 1)
 	{
 		if(startTest == 1)
@@ -330,6 +336,7 @@ int main()
 
 	printf("client finished\n");
 
+	//all cleanup in signal handler
 	raise(SIGINT);
 
 	return 0;
